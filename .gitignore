@@ -235,3 +235,4 @@ data/intermediate/*.parquet
 data/mart/*.parquet
 
 /data/
+/app/tiles/iris.geojson
