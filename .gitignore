@@ -237,3 +237,6 @@ data/mart/*.parquet
 /data/
 /app/tiles/iris.geojson
 /app/tiles/
+
+# local tiles (too large for git)
+app/tiles/
