@@ -240,3 +240,6 @@ data/mart/*.parquet
 
 # local tiles (too large for git)
 app/tiles/
+
+# local tiles (too large for git)
+app/tiles/
