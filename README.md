@@ -200,7 +200,7 @@ python3 -m http.server 8000
 
 ---
 
-## Conclusion
+## Conclusion.
 
 This project delivers a robust, well-documented pipeline for estimating and visualizing residential property prices in France.
 The design prioritizes statistic robustness (when possible), performance, and transparency of assumptions.
