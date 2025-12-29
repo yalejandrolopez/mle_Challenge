@@ -205,3 +205,36 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+/data/raw/
+
+# Project-specific ignores
+# Redundant test/development files
+simple_region_build.py
+force_regenerate.py
+*_test.py
+*_NEW.py
+*_OLD.py
+*_BACKUP.py
+*_CORRUPTED.py
+
+# Test HTML files
+test_*.html
+
+# Outdated documentation
+DELIVERY_SUMMARY.md
+PARIS_OUTLIER_FIX.md
+SAMPLE_SIZE_FIX.md
+IRIS_FINAL_DELIVERY.md
+READY_TO_DEPLOY.md
+
+# Data files (too large for git)
+data/raw/*.txt
+data/raw/*.gpkg
+data/raw/*.geojson
+data/intermediate/*.parquet
+data/mart/*.parquet
+data/tiles/*.geojson
+app/tiles/*.geojson
+app/tiles/*.pmtiles
+
+/data/

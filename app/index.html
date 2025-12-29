@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>French Real Estate Prices - Interactive Map</title>
+
+    <!-- MapLibre GL JS -->
+    <link href="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.js"></script>
+
+    <!-- PMTiles protocol -->
+    <script src="https://unpkg.com/pmtiles@3.0.3/dist/pmtiles.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 350px;
+            z-index: 1;
+        }
+
+        .info-panel h1 {
+            font-size: 20px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .info-panel p {
+            font-size: 14px;
+            color: #555;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 40px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1;
+        }
+
+        .legend h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 5px 0;
+            font-size: 12px;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            margin-right: 10px;
+            border: 1px solid #ccc;
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1;
+            min-width: 200px;
+        }
+
+        .stats h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 5px;
+        }
+
+        .stats p {
+            font-size: 12px;
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .stats .value {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .maplibregl-popup-content {
+            padding: 15px;
+            font-family: inherit;
+        }
+
+        .popup-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        .popup-row {
+            font-size: 12px;
+            margin: 4px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .popup-label {
+            color: #666;
+            margin-right: 10px;
+        }
+
+        .popup-value {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .layer-toggle {
+            position: absolute;
+            bottom: 40px;
+            left: 20px;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1;
+        }
+
+        .layer-toggle label {
+            display: block;
+            margin: 5px 0;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .layer-toggle input {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div class="info-panel">
+        <h1>🏠 French Real Estate Prices</h1>
+        <p style="font-size: 11px; color: #999; margin-bottom: 5px;">
+            <strong>Version 3.0</strong> - Multi-level + IRIS Neighborhoods
+        </p>
+        <p>
+            Interactive map showing median price per m² for residential properties.
+            <strong>Zoom in/out</strong> to switch between aggregation levels:
+        </p>
+        <p style="font-size: 12px; margin: 10px 0;">
+            • <strong>Zoom 5-7</strong>: Regions<br>
+            • <strong>Zoom 7-9</strong>: Departments<br>
+            • <strong>Zoom 9-11</strong>: Communes<br>
+            • <strong>Zoom 11+</strong>: IRIS (Neighborhoods)<br>
+            <em style="color: #666;">(Current zoom: <span id="current-zoom">6</span>)</em>
+        </p>
+        <p style="font-size: 12px; color: #888; margin-bottom: 0;">
+            Data: DVF 2025-S1 | Only areas with ≥10 sales
+        </p>
+    </div>
+
+    <div class="stats">
+        <h3>Hover Statistics</h3>
+        <p><span class="popup-label">Area:</span> <span class="value" id="stat-area">-</span></p>
+        <p><span class="popup-label">Type:</span> <span class="value" id="stat-type">-</span></p>
+        <p><span class="popup-label">Median €/m²:</span> <span class="value" id="stat-price">-</span></p>
+        <p><span class="popup-label">Sales:</span> <span class="value" id="stat-sales">-</span></p>
+        <p><span class="popup-label">Range:</span> <span class="value" id="stat-range">-</span></p>
+    </div>
+
+    <div class="legend">
+        <h3>Median Price per m²</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #1a9850;"></div>
+            <span>&lt; €1,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #66bd63;"></div>
+            <span>€1,000 - €1,500</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #a6d96a;"></div>
+            <span>€1,500 - €2,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #d9ef8b;"></div>
+            <span>€2,000 - €2,500</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #fee08b;"></div>
+            <span>€2,500 - €3,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #fdae61;"></div>
+            <span>€3,000 - €4,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #f46d43;"></div>
+            <span>€4,000 - €5,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #d73027;"></div>
+            <span>€5,000 - €8,000</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: #a50026;"></div>
+            <span>&gt; €8,000</span>
+        </div>
+    </div>
+
+    <script>
+        // Try to register PMTiles protocol if available
+        try {
+            if (typeof pmtiles !== 'undefined') {
+                let protocol = new pmtiles.Protocol();
+                maplibregl.addProtocol("pmtiles", protocol.tile);
+                console.log('✅ PMTiles protocol registered');
+            }
+        } catch (e) {
+            console.log('ℹ️ PMTiles not available, will use GeoJSON');
+        }
+
+        // Initialize map
+        const map = new maplibregl.Map({
+            container: 'map',
+            style: {
+                version: 8,
+                sources: {
+                    'osm': {
+                        type: 'raster',
+                        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                        tileSize: 256,
+                        attribution: '© OpenStreetMap contributors'
+                    }
+                },
+                layers: [{
+                    id: 'osm',
+                    type: 'raster',
+                    source: 'osm'
+                }]
+            },
+            center: [2.3522, 48.8566], // Paris
+            zoom: 6,
+            minZoom: 5,
+            maxZoom: 14
+        });
+
+        // Add navigation controls
+        map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+        // Color scale for price - Green (low) to Red (high) with 8 bins
+        const priceColorScale = [
+            'interpolate',
+            ['linear'],
+            ['get', 'median_price_m2'],
+            0,    '#1a9850',  // Dark green - lowest prices
+            1000, '#66bd63',  // Green
+            1500, '#a6d96a',  // Light green
+            2000, '#d9ef8b',  // Yellow-green
+            2500, '#fee08b',  // Yellow
+            3000, '#fdae61',  // Orange
+            4000, '#f46d43',  // Light red
+            5000, '#d73027',  // Red
+            8000, '#a50026'   // Dark red - highest prices
+        ];
+
+        // Wait for map to load
+        map.on('load', () => {
+            console.log('🗺️ Map loaded, adding sources...');
+
+            // Load all three GeoJSON sources
+            try {
+                map.addSource('region-geojson', {
+                    type: 'geojson',
+                    data: './tiles/region.geojson'
+                });
+                console.log('✅ Region source added');
+            } catch (e) {
+                console.error('❌ Error adding region source:', e);
+            }
+
+            try {
+                map.addSource('department-geojson', {
+                    type: 'geojson',
+                    data: './tiles/department.geojson'
+                });
+                console.log('✅ Department source added');
+            } catch (e) {
+                console.error('❌ Error adding department source:', e);
+            }
+
+            try {
+                map.addSource('commune-geojson', {
+                    type: 'geojson',
+                    data: './tiles/commune.geojson'
+                });
+                console.log('✅ Commune source added');
+            } catch (e) {
+                console.error('❌ Error adding commune source:', e);
+            }
+
+            try {
+                map.addSource('iris-geojson', {
+                    type: 'geojson',
+                    data: './tiles/iris.geojson'
+                });
+                console.log('✅ IRIS source added');
+            } catch (e) {
+                console.error('❌ Error adding IRIS source:', e);
+            }
+
+
+            // Add REGION layer (zoom 5-7)
+            console.log('Adding region layers...');
+            map.addLayer({
+                id: 'region-fill',
+                type: 'fill',
+                source: 'region-geojson',
+                minzoom: 0,
+                maxzoom: 7,
+                paint: {
+                    'fill-color': priceColorScale,
+                    'fill-opacity': 0.7
+                }
+            });
+
+            map.addLayer({
+                id: 'region-outline',
+                type: 'line',
+                source: 'region-geojson',
+                minzoom: 0,
+                maxzoom: 7,
+                paint: {
+                    'line-color': '#ffffff',
+                    'line-width': 1,
+                    'line-opacity': 0.8
+                }
+            });
+            console.log('✅ Region layers added (zoom 0-7)');
+
+            // Add DEPARTMENT layer (zoom 7-9)
+            console.log('Adding department layers...');
+            map.addLayer({
+                id: 'department-fill',
+                type: 'fill',
+                source: 'department-geojson',
+                minzoom: 7,
+                maxzoom: 9.5,
+                paint: {
+                    'fill-color': priceColorScale,
+                    'fill-opacity': 0.7
+                }
+            });
+
+            map.addLayer({
+                id: 'department-outline',
+                type: 'line',
+                source: 'department-geojson',
+                minzoom: 7,
+                maxzoom: 9.5,
+                paint: {
+                    'line-color': '#ffffff',
+                    'line-width': 1,
+                    'line-opacity': 0.8
+                }
+            });
+            console.log('✅ Department layers added (zoom 7-9.5)');
+
+            // Add COMMUNE layer (zoom 9-11)
+            console.log('Adding commune layers...');
+            map.addLayer({
+                id: 'commune-fill',
+                type: 'fill',
+                source: 'commune-geojson',
+                minzoom: 9.5,
+                maxzoom: 11,
+                paint: {
+                    'fill-color': priceColorScale,
+                    'fill-opacity': 0.7
+                }
+            });
+
+            map.addLayer({
+                id: 'commune-outline',
+                type: 'line',
+                source: 'commune-geojson',
+                minzoom: 9.5,
+                maxzoom: 11,
+                paint: {
+                    'line-color': '#ffffff',
+                    'line-width': 0.5,
+                    'line-opacity': 0.8
+                }
+            });
+            console.log('✅ Commune layers added (zoom 9.5-11)');
+
+            // Add IRIS layer (zoom 11+) - Neighborhood detail
+            console.log('Adding IRIS neighborhood layers...');
+            map.addLayer({
+                id: 'iris-fill',
+                type: 'fill',
+                source: 'iris-geojson',
+                minzoom: 11,
+                maxzoom: 22,
+                paint: {
+                    'fill-color': priceColorScale,
+                    'fill-opacity': 0.7
+                }
+            });
+
+            map.addLayer({
+                id: 'iris-outline',
+                type: 'line',
+                source: 'iris-geojson',
+                minzoom: 11,
+                maxzoom: 22,
+                paint: {
+                    'line-color': '#ffffff',
+                    'line-width': 0.3,
+                    'line-opacity': 0.8
+                }
+            });
+            console.log('✅ IRIS layers added (zoom 11+)');
+
+            console.log('🎉 All layers added successfully!');
+            console.log('Current zoom:', map.getZoom());
+
+            // Create popup
+            const popup = new maplibregl.Popup({
+                closeButton: false,
+                closeOnClick: false,
+                offset: 10
+            });
+
+            // Function to handle hover for any layer
+            function handleHover(e, codeField) {
+                if (e.features.length > 0) {
+                    const feature = e.features[0];
+                    const props = feature.properties;
+
+                    // Determine area name and code display
+                    let areaName = props['nom_officiel'] || props['nom_iris'] || props['nom_commune'] || 'Area';
+                    let codeLabel = '';
+                    let codeValue = '';
+
+                    if (codeField === 'code_iris') {
+                        codeLabel = 'Neighborhood Code';
+                        codeValue = props[codeField] || props['code_insee'] || '-';
+                    } else {
+                        codeLabel = 'Code';
+                        codeValue = props[codeField] || props['code_insee'] || '-';
+                    }
+
+                    // Handle Type local - show "Mixed" if N/A (from aggregation)
+                    let typeLocal = props['Type local'];
+                    if (!typeLocal || typeLocal === 'N/A' || typeLocal === 'null') {
+                        typeLocal = 'Mixed (Maison & Appartement)';
+                    }
+
+                    // Update stats panel
+                    document.getElementById('stat-area').textContent = areaName;
+                    document.getElementById('stat-type').textContent = typeLocal;
+                    document.getElementById('stat-price').textContent = props.median_price_m2
+                        ? '€' + Math.round(props.median_price_m2).toLocaleString()
+                        : '-';
+                    document.getElementById('stat-sales').textContent = props.n_sales
+                        ? props.n_sales.toLocaleString()
+                        : '-';
+
+                    if (props.p25_price_m2 && props.p75_price_m2) {
+                        const range = `€${Math.round(props.p25_price_m2).toLocaleString()} - €${Math.round(props.p75_price_m2).toLocaleString()}`;
+                        document.getElementById('stat-range').textContent = range;
+                    } else {
+                        document.getElementById('stat-range').textContent = '-';
+                    }
+
+                    // Show popup with proper labels
+                    const html = `
+                        <div class="popup-title">${areaName}</div>
+                        <div class="popup-row">
+                            <span class="popup-label">${codeLabel}:</span>
+                            <span class="popup-value">${codeValue}</span>
+                        </div>
+                        <div class="popup-row">
+                            <span class="popup-label">Type:</span>
+                            <span class="popup-value">${typeLocal}</span>
+                        </div>
+                        <div class="popup-row">
+                            <span class="popup-label">Median €/m²:</span>
+                            <span class="popup-value">€${Math.round(props.median_price_m2 || 0).toLocaleString()}</span>
+                        </div>
+                        <div class="popup-row">
+                            <span class="popup-label">IQR:</span>
+                            <span class="popup-value">€${Math.round(props.p25_price_m2 || 0).toLocaleString()} - €${Math.round(props.p75_price_m2 || 0).toLocaleString()}</span>
+                        </div>
+                        <div class="popup-row">
+                            <span class="popup-label">Sales:</span>
+                            <span class="popup-value">${(props.n_sales || 0).toLocaleString()}</span>
+                        </div>
+                        <div class="popup-row">
+                            <span class="popup-label">Last:</span>
+                            <span class="popup-value">${props.last_tx_date || 'N/A'}</span>
+                        </div>
+                    `;
+
+                    popup.setLngLat(e.lngLat).setHTML(html).addTo(map);
+
+                    // Change cursor
+                    map.getCanvas().style.cursor = 'pointer';
+                }
+            }
+
+            // Hover effects for all layers
+            map.on('mousemove', 'region-fill', (e) => handleHover(e, 'Code region'));
+            map.on('mousemove', 'department-fill', (e) => handleHover(e, 'Code departement'));
+            map.on('mousemove', 'commune-fill', (e) => handleHover(e, 'code_insee'));
+            map.on('mousemove', 'iris-fill', (e) => handleHover(e, 'code_iris'));
+
+            // Mouse leave for all layers
+            ['region-fill', 'department-fill', 'commune-fill', 'iris-fill'].forEach(layer => {
+                map.on('mouseleave', layer, () => {
+                    popup.remove();
+                    map.getCanvas().style.cursor = '';
+                });
+            });
+
+            console.log('✅ Map loaded successfully!');
+        });
+
+        // Update zoom display and log visible layers
+        map.on('zoom', () => {
+            const zoom = map.getZoom();
+            const zoomDisplay = document.getElementById('current-zoom');
+            if (zoomDisplay) {
+                zoomDisplay.textContent = zoom.toFixed(1);
+            }
+
+            // Log which layer should be visible
+            if (zoom < 7) {
+                console.log(`Zoom ${zoom.toFixed(1)}: REGION layer visible`);
+            } else if (zoom < 9.5) {
+                console.log(`Zoom ${zoom.toFixed(1)}: DEPARTMENT layer visible`);
+            } else if (zoom < 11) {
+                console.log(`Zoom ${zoom.toFixed(1)}: COMMUNE layer visible`);
+            } else {
+                console.log(`Zoom ${zoom.toFixed(1)}: IRIS (neighborhood) layer visible`);
+            }
+        });
+
+        // Error handling
+        map.on('error', (e) => {
+            console.error('Map error:', e);
+        });
+    </script>
+</body>
+</html>
+
