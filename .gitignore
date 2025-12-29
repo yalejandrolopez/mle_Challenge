@@ -233,8 +233,5 @@ data/raw/*.gpkg
 data/raw/*.geojson
 data/intermediate/*.parquet
 data/mart/*.parquet
-data/tiles/*.geojson
-app/tiles/*.geojson
-app/tiles/*.pmtiles
 
 /data/
