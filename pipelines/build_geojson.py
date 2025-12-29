@@ -110,7 +110,9 @@ def load_geometries_simple(level: str):
 
         # Simplify geometries for web (tolerance in meters, adjust as needed)
         logger.info("Simplifying geometries")
-        gdf['geometry'] = gdf['geometry'].simplify(tolerance=100, preserve_topology=True)
+        # Use higher tolerance for commune level (more features = more aggressive simplification needed)
+        tolerance = 200 if level == "commune" else 100
+        gdf['geometry'] = gdf['geometry'].simplify(tolerance=tolerance, preserve_topology=True)
 
         # Convert to WGS84 (EPSG:4326) for web
         logger.info("Converting to WGS84")
@@ -236,8 +238,25 @@ def create_geojson(level: str):
         if 'join_code' in gdf_joined.columns:
             gdf_joined = gdf_joined.drop(columns=['join_code'])
 
+        logger.info(f"Joined {len(gdf_joined):,} areas with geometries")
 
-        logger.info(f"✓ Joined {len(gdf_joined):,} areas with geometries")
+        # Select only essential columns for web visualization
+        # This significantly reduces file size
+        essential_columns = [
+            join_key,           # Geographic identifier (Code commune, Code departement, etc)
+            'Type local',       # Property type (Maison/Appartement)
+            'n_sales',          # Number of transactions
+            'median_price_m2',  # Median price per m²
+            'p25_price_m2',     # 25th percentile
+            'p75_price_m2',     # 75th percentile
+            'geometry'          # Geometry (required)
+        ]
+
+        # Filter to only columns that exist
+        columns_to_keep = [col for col in essential_columns if col in gdf_joined.columns]
+        gdf_joined = gdf_joined[columns_to_keep]
+
+        logger.info(f"Reduced to {len(columns_to_keep)} essential columns")
 
         # Save as GeoJSON
         output_path = APP_TILES_DIR / f"{level}.geojson"
